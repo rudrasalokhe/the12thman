@@ -249,6 +249,16 @@ class TTSRequest(BaseModel):
 # -------------------------------------------------------------
 # API ROUTES
 # -------------------------------------------------------------
+@app.get("/")
+def root():
+    return {
+        "service": "Matchup AI Engine (the12thman)",
+        "status": "online",
+        "documentation": "/docs",
+        "health": "/api/health",
+        "matchups": "/api/marquee-matchups"
+    }
+
 @app.get("/api/health")
 def health_check():
     return {
