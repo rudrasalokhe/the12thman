@@ -1,0 +1,32 @@
+# Environment & Secrets
+.env
+.env.local
+serviceAccountKey.json
+
+# Node & Frontend
+node_modules/
+frontend/node_modules/
+dist/
+frontend/dist/
+dist-ssr/
+*.local
+
+# Python
+__pycache__/
+backend/__pycache__/
+scraper/__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+ENV/
+
+# IDE & OS
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.log
