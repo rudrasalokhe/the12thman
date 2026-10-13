@@ -1,4 +1,4 @@
-# 🏏 MATCHUP AI
+# 🏏 THE 12th MAN
 > **Know the battle before the next ball.**  
 > *AI-Powered Live Cricket Intelligence Companion — Dream11 Forward Deployed Engineer Assignment*
 
