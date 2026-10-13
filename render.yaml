@@ -1,0 +1,37 @@
+services:
+  # 1. FastAPI Backend Web Service
+  - type: web
+    name: the12thman-backend
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn backend.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: GROQ_API_KEY
+        sync: false
+      - key: SARVAM_API_KEY
+        sync: false
+      - key: SARVAM_TTS_MODEL
+        value: bulbul:v4-flash
+      - key: SARVAM_SPEAKER
+        value: ashwin_en_sports
+      - key: SARVAM_LANGUAGE_CODE
+        value: en-IN
+
+  # 2. React + Vite Frontend Static Site
+  - type: static
+    name: the12thman-frontend
+    rootDir: frontend
+    plan: free
+    buildCommand: npm install && npm run build
+    staticPublishPath: dist
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    envVars:
+      - key: VITE_API_BASE_URL
+        fromService:
+          type: web
+          name: the12thman-backend
+          property: host
