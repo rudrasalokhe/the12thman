@@ -12,6 +12,7 @@ import json
 import os
 import requests
 import base64
+import re
 
 # Load .env file
 def load_env():
@@ -170,31 +171,57 @@ def call_groq_llm(system_prompt: str, user_prompt: str) -> str:
             print(f"[Groq Exception ({model_name})] {e}")
     return ""
 
-def call_sarvam_tts(text: str, language_code: str = "en-IN") -> Optional[str]:
-    """Generates studio commentary audio via Sarvam AI TTS (returns base64 audio)."""
+def clean_for_speech(text: str) -> str:
+    """Prepares model reply text for natural spoken audio commentary within Sarvam limit."""
+    clean = re.sub(r'\[([^\]]+)\]\([^\)]+\)', r'\1', text)
+    clean = re.sub(r'[*#_`~>]', '', clean)
+    clean = clean.replace('\u2011', '-').replace('\u2013', '-').replace('\u2014', '-').replace('"', "'")
+    clean = re.sub(r'\s+', ' ', clean).strip()
+    if len(clean) > 480:
+        segment = clean[:480]
+        last_punct = max(segment.rfind('.'), segment.rfind('!'), segment.rfind('?'))
+        if last_punct > 120:
+            clean = segment[:last_punct + 1]
+        else:
+            clean = segment
+    return clean[:490].strip()
+
+def call_sarvam_tts(text: str, language_code: str = "en-IN", speaker: Optional[str] = None) -> Optional[str]:
+    """Generates studio commentary audio via Sarvam AI TTS (returns base64 audio data URI)."""
     if not SARVAM_API_KEY:
         return None
     try:
-        # Clean text for speech (max 500 chars)
-        clean_text = text[:480].replace("*", "").replace("#", "")
+        clean_text = clean_for_speech(text)
+        if not clean_text:
+            return None
         url = "https://api.sarvam.ai/text-to-speech"
         headers = {
             "api-subscription-key": SARVAM_API_KEY,
             "Content-Type": "application/json"
         }
+        chosen_speaker = speaker or SARVAM_SPEAKER or "ashwin_en_sports"
+        valid_lang = language_code if language_code in ["en-IN", "hi-IN", "te-IN", "ta-IN", "mr-IN", "kn-IN", "bn-IN", "gu-IN"] else "en-IN"
         payload = {
             "inputs": [clean_text],
-            "target_language_code": language_code if language_code in ["en-IN", "hi-IN", "te-IN", "ta-IN", "mr-IN"] else "en-IN",
-            "speaker": SARVAM_SPEAKER,
+            "target_language_code": valid_lang,
+            "speaker": chosen_speaker,
             "model": SARVAM_TTS_MODEL
         }
-        res = requests.post(url, headers=headers, json=payload, timeout=8)
+        res = requests.post(url, headers=headers, json=payload, timeout=12)
         if res.status_code == 200:
             audios = res.json().get("audios", [])
-            if audios:
+            if audios and len(audios[0]) > 0:
                 return f"data:audio/wav;base64,{audios[0]}"
         else:
             print(f"[Sarvam TTS Error {res.status_code}] {res.text[:120]}")
+            # Fallback to standard speaker if customized speaker failed
+            if chosen_speaker != "shubh":
+                payload["speaker"] = "shubh"
+                fallback_res = requests.post(url, headers=headers, json=payload, timeout=10)
+                if fallback_res.status_code == 200:
+                    audios = fallback_res.json().get("audios", [])
+                    if audios:
+                        return f"data:audio/wav;base64,{audios[0]}"
     except Exception as e:
         print(f"[Sarvam TTS Exception] {e}")
     return None
@@ -241,10 +268,12 @@ class ChatRequest(BaseModel):
     format: Optional[str] = "IPL / T20"
     personality: Optional[str] = "bro"  # bro | analyst | hype
     language: Optional[str] = "en"
+    generate_audio: Optional[bool] = False
 
 class TTSRequest(BaseModel):
     text: str
     language: Optional[str] = "en-IN"
+    speaker: Optional[str] = None
 
 # -------------------------------------------------------------
 # API ROUTES
@@ -551,10 +580,16 @@ def chat_with_cricket_buddy(req: ChatRequest):
             "dismissals": h2h["dismissals"]
         })
 
-    # Decouple heavy TTS for sub-second responses; generated on-demand via /api/voice/tts
+    # Generate studio voice commentary if requested or pre-cached
+    audio_data_uri = None
+    if req.generate_audio and SARVAM_API_KEY:
+        lang_code = "hi-IN" if req.language in ["hi", "hi-IN"] else "en-IN"
+        audio_data_uri = call_sarvam_tts(reply, lang_code)
+
     return {
         "reply": reply,
-        "audio_url": None,
+        "audio_url": audio_data_uri,
+        "audio_base64": audio_data_uri,
         "can_voice": bool(SARVAM_API_KEY),
         "batter": req.batter,
         "bowler": req.bowler,
@@ -571,7 +606,7 @@ def chat_with_cricket_buddy(req: ChatRequest):
 @app.post("/api/voice/tts")
 def text_to_speech(req: TTSRequest):
     """Direct Sarvam TTS generation."""
-    audio = call_sarvam_tts(req.text, req.language or SARVAM_LANGUAGE_CODE)
+    audio = call_sarvam_tts(req.text, req.language or SARVAM_LANGUAGE_CODE, req.speaker)
     if not audio:
         raise HTTPException(status_code=500, detail="Sarvam TTS synthesis failed")
     return {"audio_base64": audio}

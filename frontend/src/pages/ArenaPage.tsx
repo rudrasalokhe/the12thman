@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowRight, AudioLines, BarChart3, ChevronDown, CircleGauge, MapPin, Mic, Search, Send, Sparkles, Swords, TrendingUp } from 'lucide-react';
-import { fetchMarqueeMatchups, fetchMatchup, fetchPlayers, fetchTacticalAnalysis, fetchVenues, sendChatMessage, INITIAL_PLAYERS } from '../services/api';
+import { ArrowRight, AudioLines, BarChart3, ChevronDown, CircleGauge, Loader2, MapPin, Mic, Pause, Search, Send, Sparkles, Swords, TrendingUp, Volume2, VolumeX } from 'lucide-react';
+import { fetchMarqueeMatchups, fetchMatchup, fetchPlayers, fetchTacticalAnalysis, fetchVenues, generateVoiceTTS, sendChatMessage, INITIAL_PLAYERS } from '../services/api';
 import type { ChatMessage, MarqueeMatchup, MatchupResponse, Player, TacticalAnalysisResponse } from '../services/api';
 
 const getFallbackAvatar = (name: string) =>
@@ -65,6 +65,11 @@ export function ArenaPage(){
   const [loadingMatchup,setLoadingMatchup]=useState(true);
   const [loadingTactics,setLoadingTactics]=useState(true);
   const [tab,setTab]=useState<'batter'|'bowler'>('batter'),[messages,setMessages]=useState<ChatMessage[]>([]),[input,setInput]=useState(''),[sending,setSending]=useState(false),[mode,setMode]=useState<'bro'|'analyst'|'hype'>('analyst');
+  const [audioPlayingId, setAudioPlayingId] = useState<string | null>(null);
+  const [audioLoadingId, setAudioLoadingId] = useState<string | null>(null);
+  const [autoVoice, setAutoVoice] = useState(true);
+  const [voiceLang, setVoiceLang] = useState<'en' | 'hi'>('en');
+  const currentAudioRef = useRef<HTMLAudioElement | null>(null);
   const rootRef=useRef<HTMLDivElement>(null),chatRef=useRef<HTMLDivElement>(null);
 
   useEffect(()=>{
@@ -74,6 +79,12 @@ export function ArenaPage(){
       setVenues(v);
     });
     setMessages([{id:'welcome',sender:'ai',text:'I’m across this contest. Ask me about the matchup, recent form, venue record, or tactical plan.',timestamp:'Now',followUps:['Who holds the edge here?','What is the powerplay risk?','Give me the fantasy verdict.']}]);
+    return () => {
+      if (currentAudioRef.current) {
+        currentAudioRef.current.pause();
+        currentAudioRef.current = null;
+      }
+    };
   },[]);
 
   // Instant matchup data + parallel tactical LLM analysis
@@ -95,8 +106,106 @@ export function ArenaPage(){
   useEffect(()=>{chatRef.current?.scrollTo({top:chatRef.current.scrollHeight,behavior:'smooth'})},[messages,sending]);
 
   const stats=data?.stats,phases=useMemo(()=>stats?.phase?Object.entries(stats.phase).filter(([,v])=>v):[],[stats]);
-  const send=async(text=input)=>{if(!text.trim()||sending)return;setMessages(x=>[...x,{id:`u${Date.now()}`,sender:'user',text:text.trim(),timestamp:'Now'}]);setInput('');setSending(true);try{const r=await sendChatMessage(text,batter,bowler,venue,mode,'en');setMessages(x=>[...x,{id:`a${Date.now()}`,sender:'ai',text:r.reply,timestamp:'Now',followUps:r.suggested_follow_ups,evidence:r.structured_evidence}])}catch{setMessages(x=>[...x,{id:`e${Date.now()}`,sender:'ai',text:'The analysis desk is temporarily offline. Try again in a moment.',timestamp:'Now'}])}finally{setSending(false)}};
-  const speak=()=>{const SR=(window as any).SpeechRecognition||(window as any).webkitSpeechRecognition;if(!SR)return;const r=new SR();r.lang='en-IN';r.onresult=(e:any)=>send(e.results[0][0].transcript);r.start()};
+
+  const stopAudio = () => {
+    if (currentAudioRef.current) {
+      currentAudioRef.current.pause();
+      currentAudioRef.current.currentTime = 0;
+      currentAudioRef.current = null;
+    }
+    setAudioPlayingId(null);
+  };
+
+  const playAudioForMessage = async (msgId: string, text: string, existingAudioUrl?: string | null) => {
+    if (audioPlayingId === msgId) {
+      stopAudio();
+      return;
+    }
+    stopAudio();
+
+    let audioSrc = existingAudioUrl;
+    if (!audioSrc) {
+      setAudioLoadingId(msgId);
+      try {
+        audioSrc = await generateVoiceTTS(text, voiceLang);
+        if (audioSrc) {
+          setMessages(prev => prev.map(m => m.id === msgId ? { ...m, audioUrl: audioSrc } : m));
+        }
+      } catch (err) {
+        console.error("Audio generation failed", err);
+      } finally {
+        setAudioLoadingId(null);
+      }
+    }
+
+    if (audioSrc) {
+      try {
+        const audio = new Audio(audioSrc);
+        currentAudioRef.current = audio;
+        setAudioPlayingId(msgId);
+        audio.onended = () => {
+          setAudioPlayingId(null);
+          currentAudioRef.current = null;
+        };
+        audio.onerror = () => {
+          setAudioPlayingId(null);
+          currentAudioRef.current = null;
+        };
+        await audio.play();
+      } catch (playErr) {
+        console.warn("Audio playback interrupted or blocked", playErr);
+        setAudioPlayingId(null);
+      }
+    }
+  };
+
+  const send = async (text = input) => {
+    if (!text.trim() || sending) return;
+    const userMsgId = `u${Date.now()}`;
+    const userText = text.trim();
+    setMessages(x => [...x, { id: userMsgId, sender: 'user', text: userText, timestamp: 'Now' }]);
+    setInput('');
+    setSending(true);
+
+    try {
+      const r = await sendChatMessage(userText, batter, bowler, venue, mode, voiceLang, autoVoice);
+      const aiMsgId = `a${Date.now()}`;
+      const audioUrl = r.audio_url || r.audio_base64 || null;
+
+      setMessages(x => [
+        ...x,
+        {
+          id: aiMsgId,
+          sender: 'ai',
+          text: r.reply,
+          timestamp: 'Now',
+          followUps: r.suggested_follow_ups,
+          evidence: r.structured_evidence,
+          audioUrl: audioUrl
+        }
+      ]);
+
+      if (autoVoice && audioUrl) {
+        setTimeout(() => {
+          playAudioForMessage(aiMsgId, r.reply, audioUrl);
+        }, 120);
+      }
+    } catch {
+      setMessages(x => [
+        ...x,
+        {
+          id: `e${Date.now()}`,
+          sender: 'ai',
+          text: 'The analysis desk is temporarily offline. Try again in a moment.',
+          timestamp: 'Now'
+        }
+      ]);
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const speak=()=>{const SR=(window as any).SpeechRecognition||(window as any).webkitSpeechRecognition;if(!SR)return;const r=new SR();r.lang=voiceLang==='hi'?'hi-IN':'en-IN';r.onresult=(e:any)=>send(e.results[0][0].transcript);r.start()};
   const launch=(m:MarqueeMatchup)=>{setBatter(m.batter);setBowler(m.bowler);setVenue(m.venue||'All Venues');setFormat(m.format||'IPL / T20')};
 
   return <div className="arena" ref={rootRef}>
@@ -108,7 +217,7 @@ export function ArenaPage(){
         <section className="arena-card stat-card"><div className="card-title"><div><BarChart3 size={17}/><span>HEAD-TO-HEAD</span></div><small>{stats?.balls||0} recorded deliveries</small></div>{loadingMatchup?<div className="skeleton-block"/>:data?.found&&stats?<><div className="big-stats"><div><span>RUNS</span><strong>{stats.runs}</strong><small>scored</small></div><div className="key-stat"><span>STRIKE RATE</span><strong>{stats.strike_rate}</strong><small>{stats.strike_rate>=130?'attacking return':'controlled return'}</small></div><div><span>DISMISSALS</span><strong>{stats.dismissals}</strong><small>in matchup</small></div><div><span>DOT BALLS</span><strong>{stats.dot_percentage}%</strong><small>{stats.dots} deliveries</small></div></div><div className="phase-analysis"><div className="phase-head"><span>SCORING BY PHASE</span><span>Strike rate</span></div>{phases.map(([name,p]:any)=><div className="phase-row" key={name}><span>{name}</span><div><i style={{width:`${Math.min(100,(p.strike_rate||0)/2)}%`}}/></div><strong>{p.strike_rate}</strong><small>{p.runs} off {p.balls}</small></div>)}</div></>:<div className="empty-state">No direct matchup sample is available for this pairing yet.</div>}</section>
         <section className="arena-card context-card"><div className="card-title"><div><TrendingUp size={17}/><span>FORM & CONTEXT</span></div><small>Recent innings</small></div><div className="recent-form"><div><span>LAST FIVE</span><strong>{data?.recent_form?.last_5_avg||'—'} <small>average</small></strong></div><div className="score-pills">{(data?.recent_form?.last_5_scores||['—','—','—','—','—']).map((s,i)=><span key={i}>{s}</span>)}</div></div><div className="context-metrics"><div><span>RECENT STRIKE RATE</span><strong>{data?.recent_form?.last_5_sr||'—'}</strong></div><div><span>VENUE AVERAGE</span><strong>{data?.venue_record?.average||'—'}</strong></div><div><span>VENUE HIGH</span><strong>{data?.venue_record?.highest||'—'}</strong></div></div></section>
         <section className="arena-card tactics-card"><div className="card-title"><div><Sparkles size={17}/><span>TACTICAL BLUEPRINT</span></div><div className="tabs"><button className={tab==='batter'?'active':''} onClick={()=>setTab('batter')}>Batter plan</button><button className={tab==='bowler'?'active':''} onClick={()=>setTab('bowler')}>Bowler plan</button></div></div>{loadingTactics?<div className="skeleton-block small"/>:<div className="plan"><h3>{tab==='batter'?tactics?.batter_plan?.title:tactics?.bowler_plan?.title}</h3><div className="plan-grid"><div><span>{tab==='batter'?'WHAT WORKS':'PRESSURE POINTS'}</span><ul>{(tab==='batter'?tactics?.batter_plan?.strengths:tactics?.bowler_plan?.pressure_points)?.map(x=><li key={x}>{x}</li>)}</ul></div><div><span>THE PLAN</span><ul>{(tab==='batter'?tactics?.batter_plan?.suggested_approach:tactics?.bowler_plan?.suggested_approach)?.map(x=><li key={x}>{x}</li>)}</ul></div></div>{tactics?.fantasy_verdict&&<div className="fantasy"><span>FANTASY READ</span><p>{tactics.fantasy_verdict}</p></div>}</div>}</section>
-      </div><aside className="chat-card"><div className="chat-header"><div><span className="ai-orb"><Sparkles size={17}/></span><span><strong>Matchday analyst</strong><small><i/> Tracking this contest</small></span></div><select value={mode} onChange={e=>setMode(e.target.value as any)}><option value="analyst">Analyst</option><option value="bro">Bro mode</option><option value="hype">Hype</option></select></div><div className="chat-context"><span>{batter}</span><b>vs</b><span>{bowler}</span></div><div className="messages" ref={chatRef}>{messages.map(m=><div key={m.id} className={`message ${m.sender}`}><small>{m.sender==='ai'?'MATCHDAY AI':'YOU'}</small><p>{m.text}</p>{m.followUps&&m.sender==='ai'&&<div className="followups">{m.followUps.slice(0,3).map(q=><button key={q} onClick={()=>send(q)}>{q}<ArrowRight size={13}/></button>)}</div>}</div>)}{sending&&<div className="typing"><i/><i/><i/></div>}</div><div className="chat-compose"><div><button onClick={speak} title="Ask with voice"><Mic size={18}/></button><input value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>e.key==='Enter'&&send()} placeholder="Ask about this contest…"/><button className="send" onClick={()=>send()} disabled={sending}><Send size={17}/></button></div><span><AudioLines size={13}/> Voice enabled · Grounded in verified data</span></div></aside></div>
+      </div><aside className="chat-card"><div className="chat-header"><div><span className="ai-orb"><Sparkles size={17}/></span><span><strong>Matchday analyst</strong><small><i/> Sarvam Sports Voice Active</small></span></div><div className="chat-header-actions"><button type="button" className={`voice-toggle-btn ${autoVoice?'active':''}`} onClick={()=>{if(autoVoice&&audioPlayingId)stopAudio();setAutoVoice(!autoVoice)}} title={autoVoice?'Mute automatic spoken commentary':'Enable automatic spoken commentary'}>{autoVoice?<Volume2 size={12}/>:<VolumeX size={12}/>}<span>{autoVoice?'Voice: ON':'Voice: OFF'}</span></button><select value={voiceLang} onChange={e=>setVoiceLang(e.target.value as any)} title="Commentary Language"><option value="en">EN (Ashwin)</option><option value="hi">HI (Hindi)</option></select><select value={mode} onChange={e=>setMode(e.target.value as any)}><option value="analyst">Analyst</option><option value="bro">Bro mode</option><option value="hype">Hype</option></select></div></div><div className="chat-context"><span>{batter}</span><b>vs</b><span>{bowler}</span></div><div className="messages" ref={chatRef}>{messages.map(m=><div key={m.id} className={`message ${m.sender}`}><div className="message-header-meta"><small>{m.sender==='ai'?'MATCHDAY AI':'YOU'}</small>{m.sender==='ai'&&<button type="button" className={`voice-play-pill ${audioPlayingId===m.id?'playing':''} ${audioLoadingId===m.id?'loading':''}`} onClick={()=>playAudioForMessage(m.id,m.text,m.audioUrl)} title={audioPlayingId===m.id?'Pause commentary':'Listen in Sarvam sports voice'}>{audioLoadingId===m.id?<><Loader2 size={11} className="spin"/><span>Synthesizing voice…</span></>:audioPlayingId===m.id?<><Pause size={11}/><span>Playing Voice</span><div className="audio-bars"><span/><span/><span/><span/></div></>:<><Volume2 size={11}/><span>{m.audioUrl?'Replay Voice':'Spoken Audio'}</span></>}</button>}</div><p>{m.text}</p>{m.followUps&&m.sender==='ai'&&<div className="followups">{m.followUps.slice(0,3).map(q=><button key={q} onClick={()=>send(q)}>{q}<ArrowRight size={13}/></button>)}</div>}</div>)}{sending&&<div className="typing"><i/><i/><i/></div>}</div><div className="chat-compose"><div><button onClick={speak} title="Ask with voice"><Mic size={18}/></button><input value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>e.key==='Enter'&&send()} placeholder="Ask about this contest…"/><button className="send" onClick={()=>send()} disabled={sending}><Send size={17}/></button></div><span><AudioLines size={13}/> Spoken by Sarvam AI Bulbul:v4-flash · Ashwin Sports Voice</span></div></aside></div>
     </main>
   </div>
 }

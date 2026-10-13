@@ -224,12 +224,21 @@ export async function sendChatMessage(
   bowler: string,
   venue: string = "All Venues",
   personality: string = "bro",
-  language: string = "en"
+  language: string = "en",
+  generateAudio: boolean = false
 ): Promise<any> {
   const res = await fetch(`${API_BASE_URL}/api/chat`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ message, batter, bowler, venue, personality, language }),
+    body: JSON.stringify({
+      message,
+      batter,
+      bowler,
+      venue,
+      personality,
+      language,
+      generate_audio: generateAudio
+    }),
   });
   if (!res.ok) throw new Error("Chat request failed");
   return res.json();
