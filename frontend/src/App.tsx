@@ -48,25 +48,49 @@ class ErrorBoundary extends React.Component<
   }
 }
 
+const checkIsDemoRoute = (): boolean => {
+  if (typeof window === 'undefined') return false;
+  const path = window.location.pathname.toLowerCase().replace(/\/+$/, '');
+  const hash = window.location.hash.toLowerCase();
+  
+  // Check redirect query param from 404 fallback
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const redirectParam = params.get('redirect')?.toLowerCase();
+    if (redirectParam && (redirectParam.includes('demo') || redirectParam === '/demo')) {
+      return true;
+    }
+  } catch {}
+
+  return path === '/demo' || path.endsWith('/demo') || hash === '#demo' || hash === '#/demo' || hash.includes('demo');
+};
+
 export function App() {
   const [currentRoute, setCurrentRoute] = useState<'landing' | 'demo'>(() => {
-    if (typeof window !== 'undefined' && window.location.pathname === '/demo') {
-      return 'demo';
-    }
-    return 'landing';
+    return checkIsDemoRoute() ? 'demo' : 'landing';
   });
 
-  // Listen to browser forward/backward buttons
+  // Listen to browser forward/backward buttons and hash changes
   useEffect(() => {
-    const handlePopState = () => {
-      if (window.location.pathname === '/demo') {
-        setCurrentRoute('demo');
-      } else {
-        setCurrentRoute('landing');
-      }
+    const syncRoute = () => {
+      const isDemo = checkIsDemoRoute();
+      setCurrentRoute(isDemo ? 'demo' : 'landing');
+      
+      // Clean up ?redirect=/demo to /demo if applicable
+      try {
+        const params = new URLSearchParams(window.location.search);
+        if (params.get('redirect')) {
+          window.history.replaceState({}, '', isDemo ? '/demo' : '/');
+        }
+      } catch {}
     };
-    window.addEventListener('popstate', handlePopState);
-    return () => window.removeEventListener('popstate', handlePopState);
+
+    window.addEventListener('popstate', syncRoute);
+    window.addEventListener('hashchange', syncRoute);
+    return () => {
+      window.removeEventListener('popstate', syncRoute);
+      window.removeEventListener('hashchange', syncRoute);
+    };
   }, []);
 
   const navigateTo = (route: 'landing' | 'demo') => {

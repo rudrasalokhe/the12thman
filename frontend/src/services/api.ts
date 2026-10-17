@@ -3,7 +3,22 @@
  * Typed service connecting frontend to FastAPI backend endpoints.
  */
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
+const getApiBaseUrl = (): string => {
+  const envUrl = import.meta.env.VITE_API_BASE_URL;
+  if (!envUrl) {
+    if (typeof window !== "undefined" && (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1")) {
+      return "http://localhost:8000";
+    }
+    return "";
+  }
+  let trimmed = envUrl.trim().replace(/\/+$/, "");
+  if (!trimmed.startsWith("http://") && !trimmed.startsWith("https://") && !trimmed.startsWith("/")) {
+    trimmed = `https://${trimmed}`;
+  }
+  return trimmed;
+};
+
+export const API_BASE_URL = getApiBaseUrl();
 
 export interface Player {
   name: string;

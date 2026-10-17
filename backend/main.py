@@ -137,14 +137,21 @@ MARQUEE_MATCHUPS = [
     }
 ]
 
-# -------------------------------------------------------------
-# GROQ LLM & SARVAM VOICE HELPERS
-# -------------------------------------------------------------
-def call_groq_llm(system_prompt: str, user_prompt: str) -> str:
-    """Calls Groq API with fast inference."""
+# In-memory caches for sub-millisecond repeated responses and quota protection
+_groq_cache: Dict[str, str] = {}
+_tactical_cache: Dict[str, Any] = {}
+_tts_cache: Dict[str, str] = {}
+
+def call_groq_llm(system_prompt: str, user_prompt: str, max_tokens: int = 280) -> str:
+    """Calls Groq API with ultra-fast inference and in-memory cache."""
     if not GROQ_API_KEY:
         return ""
-    for model_name in ["openai/gpt-oss-20b", "qwen/qwen3.8-27b"]:
+    cache_key = f"{system_prompt[:50]}||{user_prompt}"
+    if cache_key in _groq_cache:
+        return _groq_cache[cache_key]
+
+    # Prioritize sub-200ms ultra-fast models verified on this Groq account
+    for model_name in ["qwen/qwen3.8-27b", "allam-2-7b", "openai/gpt-oss-20b"]:
         try:
             url = "https://api.groq.com/openai/v1/chat/completions"
             headers = {
@@ -157,18 +164,21 @@ def call_groq_llm(system_prompt: str, user_prompt: str) -> str:
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt}
                 ],
-                "temperature": 0.4,
-                "max_tokens": 550
+                "temperature": 0.35,
+                "max_tokens": max_tokens
             }
-            res = requests.post(url, headers=headers, json=payload, timeout=4)
+            res = requests.post(url, headers=headers, json=payload, timeout=2.5)
             if res.status_code == 200:
                 content = res.json()["choices"][0]["message"]["content"].strip()
                 if content:
+                    _groq_cache[cache_key] = content
                     return content
+            elif res.status_code == 429:
+                continue
             else:
                 print(f"[Groq Error {res.status_code} ({model_name})] {res.text[:120]}")
-        except Exception as e:
-            print(f"[Groq Exception ({model_name})] {e}")
+        except Exception:
+            pass
     return ""
 
 def clean_for_speech(text: str) -> str:
@@ -187,41 +197,46 @@ def clean_for_speech(text: str) -> str:
     return clean[:490].strip()
 
 def call_sarvam_tts(text: str, language_code: str = "en-IN", speaker: Optional[str] = None) -> Optional[str]:
-    """Generates studio commentary audio via Sarvam AI TTS (returns base64 audio data URI)."""
+    """Generates studio commentary audio via Sarvam AI TTS (cached in memory)."""
     if not SARVAM_API_KEY:
         return None
+    clean_text = clean_for_speech(text)
+    if not clean_text:
+        return None
+    chosen_speaker = speaker or SARVAM_SPEAKER or "ashwin_en_sports"
+    valid_lang = language_code if language_code in ["en-IN", "hi-IN", "te-IN", "ta-IN", "mr-IN", "kn-IN", "bn-IN", "gu-IN"] else "en-IN"
+    cache_key = f"{clean_text}||{valid_lang}||{chosen_speaker}"
+    if cache_key in _tts_cache:
+        return _tts_cache[cache_key]
+
     try:
-        clean_text = clean_for_speech(text)
-        if not clean_text:
-            return None
         url = "https://api.sarvam.ai/text-to-speech"
         headers = {
             "api-subscription-key": SARVAM_API_KEY,
             "Content-Type": "application/json"
         }
-        chosen_speaker = speaker or SARVAM_SPEAKER or "ashwin_en_sports"
-        valid_lang = language_code if language_code in ["en-IN", "hi-IN", "te-IN", "ta-IN", "mr-IN", "kn-IN", "bn-IN", "gu-IN"] else "en-IN"
         payload = {
             "inputs": [clean_text],
             "target_language_code": valid_lang,
             "speaker": chosen_speaker,
             "model": SARVAM_TTS_MODEL
         }
-        res = requests.post(url, headers=headers, json=payload, timeout=12)
+        res = requests.post(url, headers=headers, json=payload, timeout=6)
         if res.status_code == 200:
             audios = res.json().get("audios", [])
             if audios and len(audios[0]) > 0:
-                return f"data:audio/wav;base64,{audios[0]}"
-        else:
-            print(f"[Sarvam TTS Error {res.status_code}] {res.text[:120]}")
-            # Fallback to standard speaker if customized speaker failed
-            if chosen_speaker != "shubh":
-                payload["speaker"] = "shubh"
-                fallback_res = requests.post(url, headers=headers, json=payload, timeout=10)
-                if fallback_res.status_code == 200:
-                    audios = fallback_res.json().get("audios", [])
-                    if audios:
-                        return f"data:audio/wav;base64,{audios[0]}"
+                audio_uri = f"data:audio/wav;base64,{audios[0]}"
+                _tts_cache[cache_key] = audio_uri
+                return audio_uri
+        elif chosen_speaker != "shubh":
+            payload["speaker"] = "shubh"
+            fallback_res = requests.post(url, headers=headers, json=payload, timeout=4)
+            if fallback_res.status_code == 200:
+                audios = fallback_res.json().get("audios", [])
+                if audios and len(audios[0]) > 0:
+                    audio_uri = f"data:audio/wav;base64,{audios[0]}"
+                    _tts_cache[cache_key] = audio_uri
+                    return audio_uri
     except Exception as e:
         print(f"[Sarvam TTS Exception] {e}")
     return None
@@ -409,6 +424,10 @@ def get_matchup(
 # -------------------------------------------------------------
 @app.post("/api/tactical-analysis")
 def generate_tactical_analysis(req: TacticalAnalysisRequest):
+    cache_key = f"{req.batter}||{req.bowler}||{req.venue}||{req.format}"
+    if cache_key in _tactical_cache:
+        return _tactical_cache[cache_key]
+
     key = f"{req.batter} vs {req.bowler}"
     h2h = matchups_db.get(key)
     batter_ctx = player_context_db.get(req.batter, {})
@@ -460,7 +479,7 @@ def generate_tactical_analysis(req: TacticalAnalysisRequest):
                 elif "BOWLER_APPROACH:" in l: bowler_approach = [l.split(":", 1)[1].strip()]
                 elif "FANTASY_VERDICT:" in l: fantasy_verdict = l.split(":", 1)[1].strip()
 
-    return {
+    result = {
         "matchup": key,
         "venue": req.venue,
         "batter_plan": {
@@ -478,6 +497,8 @@ def generate_tactical_analysis(req: TacticalAnalysisRequest):
         "fantasy_verdict": fantasy_verdict,
         "confidence_level": "High (Groq LLM + Cricsheet Verified)" if balls >= 25 else "Moderate (Sample Size Limited)"
     }
+    _tactical_cache[cache_key] = result
+    return result
 
 # -------------------------------------------------------------
 # CONVERSATIONAL AI CRICKET BUDDY & VOICE (GROQ + SARVAM)
@@ -621,6 +642,30 @@ def get_voice_status():
         "language": SARVAM_LANGUAGE_CODE,
         "groq_active": bool(GROQ_API_KEY)
     }
+
+# -------------------------------------------------------------
+# STATIC FRONTEND SERVING & SPA FALLBACK (If built frontend exists)
+# -------------------------------------------------------------
+FRONTEND_DIST = os.path.join(BASE_DIR, "frontend", "dist")
+if os.path.isdir(FRONTEND_DIST):
+    from fastapi.staticfiles import StaticFiles
+    from starlette.responses import FileResponse
+
+    assets_path = os.path.join(FRONTEND_DIST, "assets")
+    if os.path.isdir(assets_path):
+        app.mount("/assets", StaticFiles(directory=assets_path), name="static_assets")
+
+    @app.get("/{full_path:path}")
+    async def serve_spa_frontend(full_path: str):
+        if full_path.startswith("api/"):
+            raise HTTPException(status_code=404, detail="API endpoint not found")
+        target_file = os.path.join(FRONTEND_DIST, full_path)
+        if os.path.isfile(target_file):
+            return FileResponse(target_file)
+        index_file = os.path.join(FRONTEND_DIST, "index.html")
+        if os.path.isfile(index_file):
+            return FileResponse(index_file)
+        raise HTTPException(status_code=404, detail="Page not found")
 
 if __name__ == "__main__":
     import uvicorn
