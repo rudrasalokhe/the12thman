@@ -27,9 +27,45 @@ html,body{overflow-x:hidden}
 .audio-bars span:nth-child(2){animation-delay:.3s;height:95%}
 .audio-bars span:nth-child(3){animation-delay:.15s;height:60%}
 .audio-bars span:nth-child(4){animation-delay:.4s;height:100%}
+.voice-briefing-cta{display:inline-flex;align-items:center;gap:7px;background:#dfff4f;color:#171912;border:none;border-radius:99px;padding:8px 14px;font-size:11px;font-weight:700;cursor:pointer;transition:all .2s ease;box-shadow:0 2px 8px rgba(223,255,79,.3)}
+.voice-briefing-cta:hover{transform:translateY(-1px);background:#eaff6b;box-shadow:0 4px 12px rgba(223,255,79,.4)}
+.tactics-voice-btn{display:inline-flex;align-items:center;gap:5px;background:#efede5;color:#4b4e45;border:1px solid #d5d3c9;border-radius:6px;padding:4px 9px;font-size:10px;font-weight:600;cursor:pointer;transition:all .2s ease;margin-top:10px}
+.tactics-voice-btn:hover{background:#dfff4f;color:#171912;border-color:#171912}
 @keyframes soundBars{0%{height:25%}100%{height:100%}}
 .spin{animation:spin 1s linear infinite}
 @keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
+
+/* ── In-Game Interactive Demo Tour ── */
+.game-tour-overlay{position:fixed;inset:0;z-index:9999}
+.game-tour-spotlight{position:absolute;border-radius:14px;border:2px solid rgba(223,255,79,.7);box-shadow:0 0 0 9999px rgba(12,14,10,.78),0 0 40px 8px rgba(223,255,79,.18);pointer-events:none;transition:top .4s cubic-bezier(.22,1,.36,1),left .4s cubic-bezier(.22,1,.36,1),width .4s cubic-bezier(.22,1,.36,1),height .4s cubic-bezier(.22,1,.36,1),opacity .3s ease;z-index:10000}
+.game-tour-spotlight::after{content:'';position:absolute;inset:-6px;border-radius:18px;border:1.5px solid rgba(223,255,79,.25);animation:tourPulse 2s ease-in-out infinite;pointer-events:none}
+@keyframes tourPulse{0%,100%{opacity:.4;transform:scale(1)}50%{opacity:.9;transform:scale(1.012)}}
+
+.game-tour-card{position:fixed;bottom:32px;left:50%;transform:translateX(-50%);z-index:10001;background:rgba(23,25,18,.96);backdrop-filter:blur(24px) saturate(1.4);border:1px solid rgba(223,255,79,.15);border-radius:16px;padding:24px 26px 20px;color:#f4f2e9;box-shadow:0 -4px 50px rgba(0,0,0,.45),0 0 80px rgba(223,255,79,.06);max-width:460px;width:calc(100% - 40px);animation:tourCardIn .3s cubic-bezier(.22,1,.36,1)}
+@keyframes tourCardIn{from{opacity:0;transform:translateX(-50%) translateY(18px) scale(.97)}to{opacity:1;transform:translateX(-50%) translateY(0) scale(1)}}
+
+.game-tour-card-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.game-tour-step-tag{display:inline-flex;align-items:center;gap:6px;background:rgba(223,255,79,.1);border:1px solid rgba(223,255,79,.25);color:#dfff4f;padding:4px 10px;border-radius:99px;font-size:9px;font-weight:800;letter-spacing:.1em;text-transform:uppercase}
+.game-tour-title{font-family:Manrope,sans-serif;font-size:18px;font-weight:700;color:#fff;margin:0 0 8px;letter-spacing:-.025em;line-height:1.25}
+.game-tour-body{font-size:12.5px;color:#a9aca0;line-height:1.6;margin:0 0 16px}
+.game-tour-try-btn{background:rgba(223,255,79,.1);border:1px solid rgba(223,255,79,.3);color:#dfff4f;padding:7px 14px;border-radius:8px;font-size:11px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:6px;margin-bottom:16px;transition:all .2s ease}
+.game-tour-try-btn:hover{background:#dfff4f;color:#171912;border-color:#dfff4f;transform:translateY(-1px)}
+.game-tour-actions{display:flex;align-items:center;justify-content:space-between;gap:12px;padding-top:14px;border-top:1px solid rgba(255,255,255,.08)}
+.game-tour-dots{display:flex;gap:6px;cursor:pointer}
+.game-tour-dots span{width:8px;height:8px;border-radius:50%;background:rgba(255,255,255,.15);transition:all .25s ease;cursor:pointer}
+.game-tour-dots span:hover{background:rgba(255,255,255,.3)}
+.game-tour-dots span.active{background:#dfff4f;width:22px;border-radius:99px;box-shadow:0 0 8px rgba(223,255,79,.4)}
+.game-tour-btns{display:flex;gap:8px}
+.game-tour-btn-next{background:#dfff4f;color:#171912;border:none;border-radius:8px;padding:8px 16px;font-size:11.5px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:5px;transition:all .15s ease;box-shadow:0 2px 10px rgba(223,255,79,.25)}
+.game-tour-btn-next:hover{background:#eaff78;transform:translateY(-1px);box-shadow:0 4px 16px rgba(223,255,79,.35)}
+.game-tour-btn-prev{background:rgba(255,255,255,.06);color:#b2b5a9;border:1px solid rgba(255,255,255,.1);border-radius:8px;padding:8px 14px;font-size:11px;font-weight:600;cursor:pointer;transition:all .15s ease}
+.game-tour-btn-prev:hover{background:rgba(255,255,255,.1);color:#fff}
+.game-tour-btn-skip{background:none;border:none;color:rgba(255,255,255,.35);cursor:pointer;padding:4px;border-radius:6px;display:flex;align-items:center;justify-content:center;transition:all .15s}
+.game-tour-btn-skip:hover{color:#dfff4f;background:rgba(223,255,79,.08)}
+.replay-tour-btn{display:inline-flex;align-items:center;gap:6px;background:#20221a;border:1px solid #3c4032;color:#dfff4f;border-radius:99px;padding:8px 14px;font-size:11px;font-weight:700;cursor:pointer;transition:all .2s ease;box-shadow:0 1px 4px rgba(0,0,0,.12)}
+.replay-tour-btn:hover{background:#2a2d22;border-color:#dfff4f;transform:translateY(-1px);box-shadow:0 3px 12px rgba(223,255,79,.15)}
+@media(max-width:640px){.game-tour-card{bottom:16px;padding:18px 20px 16px;max-width:calc(100% - 24px)}.game-tour-title{font-size:16px}}
+
 
 
 @media(max-width:900px){.nav-links,.nav-cta{display:none}.menu-toggle{display:block}.hero-section{padding-top:60px}.preview-grid{grid-template-columns:1fr}.insight-panel{min-height:310px}.feature-bento{grid-template-columns:1fr;grid-template-rows:auto}.feature-large{grid-row:auto;min-height:500px}.process-grid{grid-template-columns:1fr;gap:60px}.arena-grid{grid-template-columns:1fr}.chat-card{position:static;height:580px}.arena-heading{align-items:start}.data-status{display:none}.footer-inner{flex-direction:column;gap:15px;text-align:center}}

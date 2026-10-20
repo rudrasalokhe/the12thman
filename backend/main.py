@@ -46,7 +46,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
 # -------------------------------------------------------------
 # DATA LOADING & IN-MEMORY CACHE
 # -------------------------------------------------------------
@@ -182,19 +181,28 @@ def call_groq_llm(system_prompt: str, user_prompt: str, max_tokens: int = 280) -
     return ""
 
 def clean_for_speech(text: str) -> str:
-    """Prepares model reply text for natural spoken audio commentary within Sarvam limit."""
+    """Prepares a snappy, punchy broadcast commentary line for Sarvam TTS to minimize latency (under 2.5s)."""
     clean = re.sub(r'\[([^\]]+)\]\([^\)]+\)', r'\1', text)
     clean = re.sub(r'[*#_`~>]', '', clean)
     clean = clean.replace('\u2011', '-').replace('\u2013', '-').replace('\u2014', '-').replace('"', "'")
     clean = re.sub(r'\s+', ' ', clean).strip()
-    if len(clean) > 480:
-        segment = clean[:480]
-        last_punct = max(segment.rfind('.'), segment.rfind('!'), segment.rfind('?'))
-        if last_punct > 120:
+    
+    # Prioritize first complete, punchy sentence (up to 110 chars) for lightning-fast synthesis
+    for punct in ['. ', '! ', '? ']:
+        if punct in clean:
+            first_sentence = clean.split(punct)[0]
+            if 20 <= len(first_sentence) <= 110:
+                return (first_sentence + punct[0]).strip()
+                
+    if len(clean) > 95:
+        segment = clean[:95]
+        last_punct = max(segment.rfind('.'), segment.rfind('!'), segment.rfind('?'), segment.rfind(','))
+        if last_punct > 35:
             clean = segment[:last_punct + 1]
         else:
-            clean = segment
-    return clean[:490].strip()
+            clean = segment.rsplit(' ', 1)[0] + '.'
+            
+    return clean[:95].strip()
 
 def call_sarvam_tts(text: str, language_code: str = "en-IN", speaker: Optional[str] = None) -> Optional[str]:
     """Generates studio commentary audio via Sarvam AI TTS (cached in memory)."""
@@ -221,22 +229,28 @@ def call_sarvam_tts(text: str, language_code: str = "en-IN", speaker: Optional[s
             "speaker": chosen_speaker,
             "model": SARVAM_TTS_MODEL
         }
-        res = requests.post(url, headers=headers, json=payload, timeout=6)
+        res = requests.post(url, headers=headers, json=payload, timeout=20)
         if res.status_code == 200:
             audios = res.json().get("audios", [])
             if audios and len(audios[0]) > 0:
                 audio_uri = f"data:audio/wav;base64,{audios[0]}"
                 _tts_cache[cache_key] = audio_uri
                 return audio_uri
-        elif chosen_speaker != "shubh":
-            payload["speaker"] = "shubh"
-            fallback_res = requests.post(url, headers=headers, json=payload, timeout=4)
-            if fallback_res.status_code == 200:
-                audios = fallback_res.json().get("audios", [])
-                if audios and len(audios[0]) > 0:
-                    audio_uri = f"data:audio/wav;base64,{audios[0]}"
-                    _tts_cache[cache_key] = audio_uri
-                    return audio_uri
+            else:
+                print(f"[Sarvam TTS Warning] Empty audio list returned")
+        else:
+            print(f"[Sarvam TTS Error {res.status_code}] {res.text[:140]}")
+            if chosen_speaker != "shubh":
+                payload["speaker"] = "shubh"
+                fallback_res = requests.post(url, headers=headers, json=payload, timeout=15)
+                if fallback_res.status_code == 200:
+                    audios = fallback_res.json().get("audios", [])
+                    if audios and len(audios[0]) > 0:
+                        audio_uri = f"data:audio/wav;base64,{audios[0]}"
+                        _tts_cache[cache_key] = audio_uri
+                        return audio_uri
+                else:
+                    print(f"[Sarvam TTS Fallback Error {fallback_res.status_code}] {fallback_res.text[:140]}")
     except Exception as e:
         print(f"[Sarvam TTS Exception] {e}")
     return None
@@ -499,7 +513,6 @@ def generate_tactical_analysis(req: TacticalAnalysisRequest):
     }
     _tactical_cache[cache_key] = result
     return result
-
 # -------------------------------------------------------------
 # CONVERSATIONAL AI CRICKET BUDDY & VOICE (GROQ + SARVAM)
 # -------------------------------------------------------------

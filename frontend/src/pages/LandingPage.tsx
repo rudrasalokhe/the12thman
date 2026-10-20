@@ -11,9 +11,9 @@ export function LandingPage({ onGoToDemo }: LandingPageProps) {
         <div className="container hero-copy">
           <div className="eyebrow"><span className="live-dot" /> Built for the moments between balls</div>
           <h1>See the battle<br /><em>before it unfolds.</em></h1>
-          <p className="hero-lede">The live cricket intelligence desk that turns every player matchup into a clear, tactical story—in seconds.</p>
+          <p className="hero-lede">The live cricket intelligence companion that turns every player matchup into a clear, tactical story with AI voice commentary—in seconds.</p>
           <div className="hero-actions">
-            <button className="button button-primary" onClick={onGoToDemo}>Explore a matchup <ArrowRight size={18} /></button>
+            <button className="button button-primary" onClick={onGoToDemo}>Try Interactive Demo <ArrowRight size={18} /></button>
             <a className="text-link" href="#intelligence">Discover the intelligence <ChevronRight size={17} /></a>
           </div>
           <div className="trust-row"><div><strong>15,500+</strong><span>player matchups</span></div><div><strong>1,240+</strong><span>verified matches</span></div><div><strong>&lt; 3 sec</strong><span>to an answer</span></div></div>

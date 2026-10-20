@@ -30,7 +30,7 @@ export function Navbar({ currentRoute, onNavigate }: NavbarProps) {
         </nav>
 
         <button className="nav-cta" onClick={() => go('demo')}>
-          Enter arena <ArrowUpRight size={16} />
+          Try Demo <ArrowUpRight size={16} />
         </button>
         <button className="menu-toggle" onClick={() => setOpen(!open)} aria-label="Toggle menu">
           {open ? <X /> : <Menu />}
