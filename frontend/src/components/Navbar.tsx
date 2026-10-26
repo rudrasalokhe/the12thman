@@ -8,7 +8,6 @@ interface NavbarProps {
 
 export function Navbar({ currentRoute, onNavigate }: NavbarProps) {
   const [open, setOpen] = useState(false);
-
   const go = (route: 'landing' | 'demo', anchor?: string) => {
     onNavigate(route);
     setOpen(false);
@@ -18,11 +17,12 @@ export function Navbar({ currentRoute, onNavigate }: NavbarProps) {
   return (
     <header className="site-nav">
       <div className="nav-inner">
-        <button className="brand" onClick={() => go('landing')} aria-label="Matchday AI home">
+        <button className="brand" onClick={() => go('landing')} aria-label="The 12th Man home">
           <span className="brand-mark"><span /></span>
-          <span>THE 12th MAN<span className="brand-dot">.</span>AI</span>
+          <div className="brand-lockup">
+            <span className="brand-name">THE 12th MAN<span className="brand-dot">.</span>AI</span>
+          </div>
         </button>
-
         <nav className="nav-links" aria-label="Main navigation">
           <button onClick={() => go('landing', 'intelligence')}>Intelligence</button>
           <button onClick={() => go('landing', 'how-it-works')}>How it works</button>
@@ -47,3 +47,4 @@ export function Navbar({ currentRoute, onNavigate }: NavbarProps) {
     </header>
   );
 }
+

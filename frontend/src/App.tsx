@@ -18,7 +18,7 @@ class ErrorBoundary extends React.Component<
   }
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
-    console.error("Matchup AI Caught Error:", error, errorInfo);
+    console.error("The 12th Man Caught Error:", error, errorInfo);
   }
 
   render() {
@@ -52,7 +52,7 @@ const checkIsDemoRoute = (): boolean => {
   if (typeof window === 'undefined') return false;
   const path = window.location.pathname.toLowerCase().replace(/\/+$/, '');
   const hash = window.location.hash.toLowerCase();
-  
+
   // Check redirect query param from 404 fallback
   try {
     const params = new URLSearchParams(window.location.search);
@@ -60,7 +60,7 @@ const checkIsDemoRoute = (): boolean => {
     if (redirectParam && (redirectParam.includes('demo') || redirectParam === '/demo')) {
       return true;
     }
-  } catch {}
+  } catch { }
 
   return path === '/demo' || path.endsWith('/demo') || hash === '#demo' || hash === '#/demo' || hash.includes('demo');
 };
@@ -75,14 +75,14 @@ export function App() {
     const syncRoute = () => {
       const isDemo = checkIsDemoRoute();
       setCurrentRoute(isDemo ? 'demo' : 'landing');
-      
+
       // Clean up ?redirect=/demo to /demo if applicable
       try {
         const params = new URLSearchParams(window.location.search);
         if (params.get('redirect')) {
           window.history.replaceState({}, '', isDemo ? '/demo' : '/');
         }
-      } catch {}
+      } catch { }
     };
 
     window.addEventListener('popstate', syncRoute);

@@ -1,5 +1,5 @@
 /**
- * Matchup AI API Client
+ * The 12th Man API Client
  * Typed service connecting frontend to FastAPI backend endpoints.
  */
 

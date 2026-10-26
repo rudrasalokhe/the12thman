@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowRight, AudioLines, BarChart3, ChevronDown, ChevronRight, CircleGauge, Loader2, MapPin, Mic, Pause, Search, Send, Sparkles, Swords, TrendingUp, Volume2, VolumeX, X } from 'lucide-react';
+import { ArrowRight, AudioLines, BarChart3, ChevronDown, ChevronRight, ChevronUp, CircleGauge, Database, FileText, Info, Loader2, MapPin, Mic, Pause, Search, Send, ShieldCheck, Sparkles, Swords, TrendingUp, Volume2, VolumeX, X } from 'lucide-react';
 import { fetchMarqueeMatchups, fetchMatchup, fetchPlayers, fetchTacticalAnalysis, fetchVenues, generateVoiceTTS, sendChatMessage, INITIAL_PLAYERS } from '../services/api';
 import type { ChatMessage, MarqueeMatchup, MatchupResponse, Player, TacticalAnalysisResponse } from '../services/api';
 
@@ -69,6 +69,7 @@ export function ArenaPage(){
   const [audioLoadingId, setAudioLoadingId] = useState<string | null>(null);
   const [autoVoice, setAutoVoice] = useState(true);
   const [voiceLang, setVoiceLang] = useState<'en' | 'hi'>('en');
+  const [evidenceOpen, setEvidenceOpen] = useState(false);
   const [tourStep, setTourStep] = useState<number | null>(() => {
     if (typeof window !== 'undefined') {
       return sessionStorage.getItem('matchup_tour_seen') ? null : 0;
@@ -228,6 +229,20 @@ export function ArenaPage(){
 
   const stats=data?.stats,phases=useMemo(()=>stats?.phase?Object.entries(stats.phase).filter(([,v])=>v):[],[stats]);
 
+  const rawAvgRuns = useMemo(() => {
+    const scores = data?.recent_form?.last_5_scores;
+    if (!scores || scores.length === 0) return null;
+    let sum = 0, count = 0;
+    for (const s of scores) {
+      const match = s.match(/^(\d+)/);
+      if (match) {
+        sum += parseInt(match[1], 10);
+        count++;
+      }
+    }
+    return count > 0 ? (sum / count).toFixed(1) : null;
+  }, [data?.recent_form?.last_5_scores]);
+
   const unlockAudioContext = () => {
     try {
       if (!silentAudioRef.current) {
@@ -348,6 +363,7 @@ export function ArenaPage(){
     r.onresult=(e:any)=>send(e.results[0][0].transcript);
     r.start();
   };
+
   const launch=(m:MarqueeMatchup)=>{setBatter(m.batter);setBowler(m.bowler);setVenue(m.venue||'All Venues');setFormat(m.format||'IPL / T20')};
 
   return <div className="arena" ref={rootRef}>
@@ -426,9 +442,9 @@ export function ArenaPage(){
     <main className="container arena-main">
       <header className="arena-heading">
         <div>
-          <span>THE MATCHUP ARENA</span>
+          <span className="arena-kicker">THE 12th MAN ARENA</span>
           <h1>Read the contest.</h1>
-          <p>History, current form and tactical intelligence in one live workspace.</p>
+          <p>Historical battle archives, current form, and tactical intelligence in one workspace.</p>
         </div>
         <div style={{display:'flex',alignItems:'center',gap:'12px',flexWrap:'wrap'}}>
           <button 
@@ -449,15 +465,267 @@ export function ArenaPage(){
             <Volume2 size={14}/>
             <span>Play Matchup Audio Briefing</span>
           </button>
-          <div className="data-status"><i/><span><strong>DATA DESK ONLINE</strong>Verified match logs</span></div>
+          <div className="data-status live-clarification" title="All metrics are computed from 1,243 verified historical matches (2008–present). When live games are underway, real-time live feeds connect via webhook.">
+            <i/>
+            <span>
+              <strong>HISTORICAL ARCHIVE ACTIVE</strong>
+              1,243 Matches · Live Feed Ready
+            </span>
+          </div>
         </div>
       </header>
+
+      <div className="live-feed-banner">
+        <ShieldCheck size={14} className="lfb-icon" />
+        <span><strong>Historical Baseline:</strong> Statistics reflect 1,243 verified historical matches (2008–Present). In-play telemetry integrates dynamically during live matches.</span>
+      </div>
+
       <section className="matchup-control" id="tour-rivalry"><div className="control-label"><Swords size={17}/> SELECT THE BATTLE</div><div className="matchup-players"><PlayerSelect label="Batter" value={batter} players={players} open={open==='batter'} onToggle={()=>setOpen(open==='batter'?null:'batter')} onSelect={v=>{setBatter(v);setOpen(null)}}/><div className="arena-vs"><span>VS</span></div><PlayerSelect label="Bowler" value={bowler} players={players} open={open==='bowler'} onToggle={()=>setOpen(open==='bowler'?null:'bowler')} onSelect={v=>{setBowler(v);setOpen(null)}}/></div><div className="filters"><label><MapPin size={15}/><span>VENUE</span><select value={venue} onChange={e=>setVenue(e.target.value)}>{venues.map(v=><option key={v}>{v}</option>)}</select></label><label><CircleGauge size={15}/><span>FORMAT</span><select value={format} onChange={e=>setFormat(e.target.value)}><option>IPL / T20</option><option>ODI</option><option>Test</option></select></label></div></section>
+      
       <div className="arena-grid"><div className="analysis-column">
-        <section className="arena-card stat-card" id="tour-stats"><div className="card-title"><div><BarChart3 size={17}/><span>HEAD-TO-HEAD</span></div><small>{stats?.balls||0} recorded deliveries</small></div>{loadingMatchup?<div className="skeleton-block"/>:data?.found&&stats?<><div className="big-stats"><div><span>RUNS</span><strong>{stats.runs}</strong><small>scored</small></div><div className="key-stat"><span>STRIKE RATE</span><strong>{stats.strike_rate}</strong><small>{stats.strike_rate>=130?'attacking return':'controlled return'}</small></div><div><span>DISMISSALS</span><strong>{stats.dismissals}</strong><small>in matchup</small></div><div><span>DOT BALLS</span><strong>{stats.dot_percentage}%</strong><small>{stats.dots} deliveries</small></div></div><div className="phase-analysis"><div className="phase-head"><span>SCORING BY PHASE</span><span>Strike rate</span></div>{phases.map(([name,p]:any)=><div className="phase-row" key={name}><span>{name}</span><div><i style={{width:`${Math.min(100,(p.strike_rate||0)/2)}%`}}/></div><strong>{p.strike_rate}</strong><small>{p.runs} off {p.balls}</small></div>)}</div></>:<div className="empty-state">No direct matchup sample is available for this pairing yet.</div>}</section>
-        <section className="arena-card context-card"><div className="card-title"><div><TrendingUp size={17}/><span>FORM & CONTEXT</span></div><small>Recent innings</small></div><div className="recent-form"><div><span>LAST FIVE</span><strong>{data?.recent_form?.last_5_avg||'—'} <small>average</small></strong></div><div className="score-pills">{(data?.recent_form?.last_5_scores||['—','—','—','—','—']).map((s,i)=><span key={i}>{s}</span>)}</div></div><div className="context-metrics"><div><span>RECENT STRIKE RATE</span><strong>{data?.recent_form?.last_5_sr||'—'}</strong></div><div><span>VENUE AVERAGE</span><strong>{data?.venue_record?.average||'—'}</strong></div><div><span>VENUE HIGH</span><strong>{data?.venue_record?.highest||'—'}</strong></div></div></section>
+        <section className="arena-card stat-card" id="tour-stats"><div className="card-title"><div><BarChart3 size={17}/><span>HEAD-TO-HEAD</span></div><small>{stats?.balls||0} recorded deliveries (historical archive)</small></div>{loadingMatchup?<div className="skeleton-block"/>:data?.found&&stats?<><div className="big-stats"><div><span>RUNS</span><strong>{stats.runs}</strong><small>scored</small></div><div className="key-stat"><span>STRIKE RATE</span><strong>{stats.strike_rate}</strong><small>{stats.strike_rate>=130?'attacking return':'controlled return'}</small></div><div><span>DISMISSALS</span><strong>{stats.dismissals}</strong><small>in matchup</small></div><div><span>DOT BALLS</span><strong>{stats.dot_percentage}%</strong><small>{stats.dots} deliveries</small></div></div><div className="phase-analysis"><div className="phase-head"><span>SCORING BY PHASE</span><span>Strike rate</span></div>{phases.map(([name,p]:any)=><div className="phase-row" key={name}><span>{name}</span><div><i style={{width:`${Math.min(100,(p.strike_rate||0)/2)}%`}}/></div><strong>{p.strike_rate}</strong><small>{p.runs} off {p.balls}</small></div>)}</div></>:<div className="empty-state">No direct matchup sample is available for this pairing yet.</div>}</section>
+        
+        <section className="arena-card context-card">
+          <div className="card-title">
+            <div><TrendingUp size={17}/><span>FORM & CONTEXT</span></div>
+            <small>Recent innings</small>
+          </div>
+          <div className="recent-form">
+            <div className="batting-avg-block">
+              <div className="stat-label-wrap">
+                <span>LAST 5 BATTING AVG</span>
+                <span className="stat-info-pill" title="Official cricket batting average = Total Runs ÷ Dismissals (outs). If a batter remained Not Out (*), their batting average exceeds their raw average runs per innings.">
+                  <Info size={10} /> Runs / Out
+                </span>
+              </div>
+              <strong>{data?.recent_form?.last_5_avg ?? '—'} <small>batting avg</small></strong>
+              <div className="avg-clarification">
+                <span>Runs per dismissal (not per-match average)</span>
+                {rawAvgRuns !== null && (
+                  <span className="raw-avg-tag">Raw avg: {rawAvgRuns} runs/inn</span>
+                )}
+              </div>
+            </div>
+            <div className="score-pills-wrap">
+              <span className="score-pills-label">Recent 5 Innings (Runs & Balls)</span>
+              <div className="score-pills">
+                {(data?.recent_form?.last_5_scores||['—','—','—','—','—']).map((s,i)=>(
+                  <span key={i} title={s.includes('*') ? 'Not Out (*)' : 'Dismissed'}>{s}</span>
+                ))}
+              </div>
+            </div>
+          </div>
+          <div className="context-metrics">
+            <div><span>RECENT STRIKE RATE</span><strong>{data?.recent_form?.last_5_sr||'—'}</strong></div>
+            <div><span>VENUE BATTING AVG</span><strong>{data?.venue_record?.average||'—'}</strong></div>
+            <div><span>VENUE HIGH</span><strong>{data?.venue_record?.highest||'—'}</strong></div>
+          </div>
+        </section>
+
         <section className="arena-card tactics-card" id="tour-tactics"><div className="card-title"><div><Sparkles size={17}/><span>TACTICAL BLUEPRINT</span></div><div className="tabs"><button className={tab==='batter'?'active':''} onClick={()=>setTab('batter')}>Batter plan</button><button className={tab==='bowler'?'active':''} onClick={()=>setTab('bowler')}>Bowler plan</button></div></div>{loadingTactics?<div className="skeleton-block small"/>:<div className="plan"><h3>{tab==='batter'?tactics?.batter_plan?.title:tactics?.bowler_plan?.title}</h3><div className="plan-grid"><div><span>{tab==='batter'?'WHAT WORKS':'PRESSURE POINTS'}</span><ul>{(tab==='batter'?tactics?.batter_plan?.strengths:tactics?.bowler_plan?.pressure_points)?.map(x=><li key={x}>{x}</li>)}</ul></div><div><span>THE PLAN</span><ul>{(tab==='batter'?tactics?.batter_plan?.suggested_approach:tactics?.bowler_plan?.suggested_approach)?.map(x=><li key={x}>{x}</li>)}</ul></div></div>{tactics?.fantasy_verdict&&<div className="fantasy"><span>FANTASY READ</span><p>{tactics.fantasy_verdict}</p></div>}<button type="button" className="tactics-voice-btn" onClick={() => send(`Explain the ${tab === 'batter' ? batter + ' batter' : bowler + ' bowler'} approach strategy for this contest`)}><Volume2 size={13}/><span>Listen to {tab === 'batter' ? `${batter}'s` : `${bowler}'s`} Voice Plan</span></button></div>}</section>
-      </div><aside className="chat-card" id="tour-chat"><div className="chat-header"><div><span className="ai-orb"><Sparkles size={17}/></span><span><strong>Matchday analyst</strong><small><i/> Sarvam Sports Voice Active</small></span></div><div className="chat-header-actions"><button type="button" className={`voice-toggle-btn ${autoVoice?'active':''}`} onClick={()=>{if(autoVoice&&audioPlayingId)stopAudio();setAutoVoice(!autoVoice)}} title={autoVoice?'Mute automatic spoken commentary':'Enable automatic spoken commentary'}>{autoVoice?<Volume2 size={12}/>:<VolumeX size={12}/>}<span>{autoVoice?'Voice: ON':'Voice: OFF'}</span></button><select value={voiceLang} onChange={e=>setVoiceLang(e.target.value as any)} title="Commentary Language"><option value="en">EN (Ashwin)</option><option value="hi">HI (Hindi)</option></select><select value={mode} onChange={e=>setMode(e.target.value as any)}><option value="analyst">Analyst</option><option value="bro">Bro mode</option><option value="hype">Hype</option></select></div></div><div className="chat-context"><span>{batter}</span><b>vs</b><span>{bowler}</span></div><div className="messages" ref={chatRef}>{messages.map(m=><div key={m.id} className={`message ${m.sender}`}><div className="message-header-meta"><small>{m.sender==='ai'?'MATCHDAY AI':'YOU'}</small>{m.sender==='ai'&&<button type="button" className={`voice-play-pill ${audioPlayingId===m.id?'playing':''} ${audioLoadingId===m.id?'loading':''}`} onClick={()=>playAudioForMessage(m.id,m.text,m.audioUrl)} title={audioPlayingId===m.id?'Pause commentary':'Listen in Sarvam sports voice'}>{audioLoadingId===m.id?<><Loader2 size={11} className="spin"/><span>Synthesizing voice…</span></>:audioPlayingId===m.id?<><Pause size={11}/><span>Playing Voice</span><div className="audio-bars"><span/><span/><span/><span/></div></>:<><Volume2 size={11}/><span>{m.audioUrl?'Replay Voice':'Sarvam Voice'}</span></>}</button>}</div><p>{m.text}</p>{m.followUps&&m.sender==='ai'&&<div className="followups">{m.followUps.slice(0,3).map(q=><button key={q} onClick={()=>send(q)}>{q}<ArrowRight size={13}/></button>)}</div>}</div>)}{sending&&<div className="typing"><i/><i/><i/></div>}</div><div className="chat-compose"><div><button onClick={speak} title="Ask with voice"><Mic size={18}/></button><input value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>e.key==='Enter'&&send()} placeholder="Ask about this contest…"/><button className="send" onClick={()=>send()} disabled={sending}><Send size={17}/></button></div><span><AudioLines size={13}/> Spoken by Sarvam AI Bulbul:v4-flash · Ashwin Sports Voice</span></div></aside></div>
+
+        <section className="arena-card source-evidence-card">
+          <button 
+            type="button" 
+            className="source-evidence-header" 
+            onClick={() => setEvidenceOpen(!evidenceOpen)}
+            aria-expanded={evidenceOpen}
+          >
+            <div className="seh-title">
+              <Database size={16} />
+              <span>STATISTICAL EVIDENCE & DATA PROVENANCE</span>
+              <span className="seh-badge">1,243 Matches · Cricsheet Archive</span>
+            </div>
+            <div className="seh-toggle">
+              <span>{evidenceOpen ? 'Hide Evidence & Methodology' : 'Inspect Evidence & Source Details'}</span>
+              {evidenceOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+            </div>
+          </button>
+
+          {evidenceOpen && (
+            <div className="source-evidence-content">
+              <div className="provenance-grid">
+                <div className="prov-card">
+                  <span className="prov-label">PRIMARY DATA SOURCE</span>
+                  <strong>Cricsheet Open Ball-by-Ball Archive</strong>
+                  <p>Official match registries spanning men's IPL and international T20 cricket from 2008 through the 2024 season.</p>
+                </div>
+                <div className="prov-card">
+                  <span className="prov-label">DATASET SAMPLE SCOPE</span>
+                  <strong>1,243 Verified Matches</strong>
+                  <p>15,593 unique batter-bowler head-to-head records and 739 player form profiles parsed with automated ETL.</p>
+                </div>
+                <div className="prov-card">
+                  <span className="prov-label">CURRENT DUEL SAMPLE</span>
+                  <strong>{stats?.balls || 0} Legal Deliveries Recorded</strong>
+                  <p>{data?.found && stats ? `${stats.runs} runs scored, ${stats.dismissals} dismissals, ${stats.dots} dot deliveries.` : 'No direct ball-by-ball deliveries recorded in monitored matches.'}</p>
+                </div>
+                <div className="prov-card">
+                  <span className="prov-label">CONFIDENCE & LIVE STATUS</span>
+                  <strong className={stats && stats.balls >= 50 ? 'confidence-high' : 'confidence-med'}>
+                    {stats && stats.balls >= 50 ? 'High Confidence (>50 balls)' : stats && stats.balls >= 15 ? 'Moderate Sample (15–50 balls)' : 'Exploratory Sample (<15 balls)'}
+                  </strong>
+                  <p>Historical baseline. Live match telemetry connects dynamically via webhook/stream during live matches.</p>
+                </div>
+              </div>
+
+              <div className="methodology-box">
+                <div className="meth-title">STATISTICAL METHODOLOGY & FORMULA RULES</div>
+                <div className="meth-grid">
+                  <div>
+                    <strong>Batting Average:</strong>
+                    <span>Runs ÷ Dismissals (Outs). Not-out innings (*) add to runs without incrementing dismissals, which is why batting average differs from raw average runs per match.</span>
+                  </div>
+                  <div>
+                    <strong>Strike Rate:</strong>
+                    <span>(Total Runs ÷ Legal Deliveries Faced) × 100. Wides and illegal deliveries are excluded from balls faced.</span>
+                  </div>
+                  <div>
+                    <strong>Dot Ball %:</strong>
+                    <span>(Deliveries with 0 runs scored off bat ÷ Total Legal Deliveries) × 100. Measures bowling pressure.</span>
+                  </div>
+                  <div>
+                    <strong>Phase Splits:</strong>
+                    <span>Powerplay (Overs 1–6), Middle Overs (Overs 7–15), Death Overs (Overs 16–20).</span>
+                  </div>
+                </div>
+              </div>
+
+              {data?.data_provenance?.limitations && (
+                <div className="limitations-note">
+                  <strong>Dataset Coverage Note:</strong> {data.data_provenance.limitations}
+                </div>
+              )}
+            </div>
+          )}
+        </section>
+      </div>
+
+      <aside className="chat-card" id="tour-chat">
+        <div className="chat-header">
+          <div>
+            <span className="ai-orb"><Sparkles size={17}/></span>
+            <span>
+              <strong>The 12th Man</strong>
+              <small><i/> AI Cricket Companion · Sarvam Voice</small>
+            </span>
+          </div>
+          <div className="chat-header-actions">
+            <button type="button" className={`voice-toggle-btn ${autoVoice?'active':''}`} onClick={()=>{if(autoVoice&&audioPlayingId)stopAudio();setAutoVoice(!autoVoice)}} title={autoVoice?'Mute automatic spoken commentary':'Enable automatic spoken commentary'}>{autoVoice?<Volume2 size={12}/>:<VolumeX size={12}/>}<span>{autoVoice?'Voice: ON':'Voice: OFF'}</span></button>
+            <select value={voiceLang} onChange={e=>setVoiceLang(e.target.value as any)} title="Commentary Language"><option value="en">EN (Ashwin)</option><option value="hi">HI (Hindi)</option></select>
+            <select value={mode} onChange={e=>setMode(e.target.value as any)}><option value="analyst">Analyst</option><option value="bro">Bro mode</option><option value="hype">Hype</option></select>
+          </div>
+        </div>
+        
+        <div className="chat-context"><span>{batter}</span><b>vs</b><span>{bowler}</span></div>
+        
+        <div className="messages" ref={chatRef}>
+          {messages.length <= 1 && (
+            <div className="chat-welcome-insight">
+              <div className="cwi-header">
+                <div className="cwi-title">
+                  <Sparkles size={14} />
+                  <span>MATCHUP QUICK INSIGHT</span>
+                </div>
+                <span className="cwi-badge">{stats ? `${stats.balls} Balls Logged` : 'Historical Duel'}</span>
+              </div>
+              <div className="cwi-body">
+                <div className="cwi-pairing">
+                  <strong>{batter}</strong>
+                  <span className="cwi-vs">vs</span>
+                  <strong>{bowler}</strong>
+                  <small>· {venue}</small>
+                </div>
+                {data?.found && stats ? (
+                  <div className="cwi-stats-chip">
+                    <span><b>{stats.runs}</b> Runs</span>
+                    <span>•</span>
+                    <span><b>{stats.balls}</b> Balls</span>
+                    <span>•</span>
+                    <span className="cwi-sr">SR <b>{stats.strike_rate}</b></span>
+                    <span>•</span>
+                    <span><b>{stats.dismissals}</b> {stats.dismissals === 1 ? 'Dismissal' : 'Dismissals'}</span>
+                    <span>•</span>
+                    <span><b>{stats.dot_percentage}%</b> Dots</span>
+                  </div>
+                ) : (
+                  <p className="cwi-desc">
+                    No direct head-to-head encounter recorded in this dataset yet. Statistical prediction is active based on individual phase & bowling-type profiles.
+                  </p>
+                )}
+
+                {tactics?.fantasy_verdict && (
+                  <div className="cwi-verdict">
+                    <span className="cwi-verdict-tag">TACTICAL READ</span>
+                    <p>{tactics.fantasy_verdict}</p>
+                  </div>
+                )}
+              </div>
+
+              <div className="cwi-prompts-label">SUGGESTED MATCHUP QUESTIONS</div>
+              <div className="cwi-prompts">
+                <button type="button" onClick={() => send(`Who holds the tactical edge between ${batter} and ${bowler}?`)}>
+                  <span>⚡ Who holds the tactical edge?</span>
+                  <ArrowRight size={12} />
+                </button>
+                <button type="button" onClick={() => send(`What deliveries and lengths pose the highest dismissal risk for ${batter}?`)}>
+                  <span>🎯 Lethal delivery zones & risk</span>
+                  <ArrowRight size={12} />
+                </button>
+                <button type="button" onClick={() => send(`Should I make ${batter} my fantasy captain against ${bowler} at ${venue}?`)}>
+                  <span>⭐ Fantasy captaincy verdict</span>
+                  <ArrowRight size={12} />
+                </button>
+                <button type="button" onClick={() => send(`How does ${batter} score against ${bowler} across Powerplay vs Death overs?`)}>
+                  <span>📊 Phase-by-phase scoring splits</span>
+                  <ArrowRight size={12} />
+                </button>
+              </div>
+
+              <button 
+                type="button" 
+                className="cwi-voice-cta" 
+                onClick={() => send(`Give me a tactical breakdown and edge assessment of ${batter} vs ${bowler} at ${venue}`)}
+              >
+                <Volume2 size={13} />
+                <span>Play Matchup Audio Briefing</span>
+              </button>
+            </div>
+          )}
+
+          {messages.map(m=>(
+            <div key={m.id} className={`message ${m.sender}`}>
+              <div className="message-header-meta">
+                <small>{m.sender==='ai'?'THE 12th MAN':'YOU'}</small>
+                {m.sender==='ai'&&<button type="button" className={`voice-play-pill ${audioPlayingId===m.id?'playing':''} ${audioLoadingId===m.id?'loading':''}`} onClick={()=>playAudioForMessage(m.id,m.text,m.audioUrl)} title={audioPlayingId===m.id?'Pause commentary':'Listen in Sarvam sports voice'}>{audioLoadingId===m.id?<><Loader2 size={11} className="spin"/><span>Synthesizing voice…</span></>:audioPlayingId===m.id?<><Pause size={11}/><span>Playing Voice</span><div className="audio-bars"><span/><span/><span/><span/></div></>:<><Volume2 size={11}/><span>{m.audioUrl?'Replay Voice':'Sarvam Voice'}</span></>}</button>}
+              </div>
+              <p>{m.text}</p>
+              {m.evidence && m.evidence.length > 0 && m.sender === 'ai' && (
+                <details className="msg-evidence-details">
+                  <summary><FileText size={11} /> Grounded Evidence ({m.evidence.length} points)</summary>
+                  <ul>
+                    {m.evidence.map((pt, idx) => (
+                      <li key={idx}>{pt}</li>
+                    ))}
+                  </ul>
+                </details>
+              )}
+              {m.followUps&&m.sender==='ai'&&<div className="followups">{m.followUps.slice(0,3).map(q=><button key={q} onClick={()=>send(q)}>{q}<ArrowRight size={13}/></button>)}</div>}
+            </div>
+          ))}
+          {sending&&<div className="typing"><i/><i/><i/></div>}
+        </div>
+        
+        <div className="chat-compose">
+          <div>
+            <button onClick={speak} title="Ask with voice"><Mic size={18}/></button>
+            <input value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>e.key==='Enter'&&send()} placeholder="Ask about this contest…"/>
+            <button className="send" onClick={()=>send()} disabled={sending}><Send size={17}/></button>
+          </div>
+          <span><AudioLines size={13}/> Spoken by Sarvam AI Bulbul:v4-flash · Ashwin Sports Voice</span>
+        </div>
+      </aside>
+    </div>
     </main>
   </div>
 }

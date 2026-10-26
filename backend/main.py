@@ -34,7 +34,7 @@ SARVAM_SPEAKER = os.getenv("SARVAM_SPEAKER", "ashwin_en_sports")
 SARVAM_LANGUAGE_CODE = os.getenv("SARVAM_LANGUAGE_CODE", "en-IN")
 
 app = FastAPI(
-    title="Matchup AI Backend",
+    title="The 12th Man AI Backend",
     description="Live cricket tactical intelligence powered by Groq & Sarvam AI",
     version="1.0.0"
 )
@@ -310,7 +310,7 @@ class TTSRequest(BaseModel):
 @app.get("/")
 def root():
     return {
-        "service": "Matchup AI Engine (the12thman)",
+        "service": "The 12th Man AI Engine",
         "status": "online",
         "documentation": "/docs",
         "health": "/api/health",
@@ -321,7 +321,7 @@ def root():
 def health_check():
     return {
         "status": "healthy",
-        "service": "Matchup AI Engine",
+        "service": "The 12th Man AI Engine",
         "groq_configured": bool(GROQ_API_KEY),
         "sarvam_configured": bool(SARVAM_API_KEY),
         "speaker": SARVAM_SPEAKER,
@@ -467,11 +467,11 @@ def generate_tactical_analysis(req: TacticalAnalysisRequest):
     bowler_pressure = [f"Maintains {dot_pct}% dot ball pressure."]
     bowler_approach = ["Target off-stump channel to force false strokes."]
     fantasy_verdict = f"Even battle. {req.batter} has {sr} SR against {req.bowler} with {dismissals} dismissals."
-
+    
     # Enhance with Groq LLM if key available
     if GROQ_API_KEY:
         system_prompt = (
-            "You are Matchup AI's elite cricket tactical analyst for Dream11. "
+            "You are The 12th Man's elite cricket tactical analyst for Dream11. "
             "Given exact player statistics, provide 1 concise sentence each for: "
             "BATTER_STRENGTH, BATTER_VULNERABILITY, BATTER_APPROACH, BOWLER_EFFECTIVENESS, BOWLER_PRESSURE, BOWLER_APPROACH, FANTASY_VERDICT. "
             "Ground your answer ONLY in the provided numbers. Do not invent unrecorded data."
@@ -555,7 +555,7 @@ def chat_with_cricket_buddy(req: ChatRequest):
             )
 
         system_prompt = (
-            f"You are 'Cricket Buddy' on Matchup AI. Personality: {tone_instruction}\n"
+            f"You are 'The 12th Man' cricket intelligence companion. Personality: {tone_instruction}\n"
             "CRITICAL CRICKET DOMAIN RULES:\n"
             "1. When the user asks 'which ball', 'lethal delivery', 'what ball', 'yorker or good length', or 'how does he get him out': "
             "YOU MUST ALWAYS ANSWER IN TERMS OF CRICKET DELIVERY TYPES, LINE, AND LENGTH (e.g. toe-crushing yorker on leg stump, hard back-of-a-length in the 5th-stump corridor of uncertainty, dipping slower ball, sharp inswinger, fiery bouncer). "
