@@ -181,39 +181,50 @@ def call_groq_llm(system_prompt: str, user_prompt: str, max_tokens: int = 280) -
     return ""
 
 def clean_for_speech(text: str) -> str:
-    """Prepares a snappy, punchy broadcast commentary line for Sarvam TTS to minimize latency (under 2.5s)."""
+    """Prepares clean broadcast commentary for Sarvam TTS by stripping markdown, emojis, and symbols."""
     clean = re.sub(r'\[([^\]]+)\]\([^\)]+\)', r'\1', text)
     clean = re.sub(r'[*#_`~>]', '', clean)
     clean = clean.replace('\u2011', '-').replace('\u2013', '-').replace('\u2014', '-').replace('"', "'")
     clean = re.sub(r'\s+', ' ', clean).strip()
+    return clean
+
+def chunk_text_for_tts(text: str, max_chunk_chars: int = 450) -> list:
+    """Splits full commentary text into natural sentence-based chunks for Sarvam TTS (up to 450 chars each)."""
+    clean = clean_for_speech(text)
+    if not clean:
+        return []
+    if len(clean) <= max_chunk_chars:
+        return [clean]
     
-    # Prioritize first complete, punchy sentence (up to 110 chars) for lightning-fast synthesis
-    for punct in ['. ', '! ', '? ']:
-        if punct in clean:
-            first_sentence = clean.split(punct)[0]
-            if 20 <= len(first_sentence) <= 110:
-                return (first_sentence + punct[0]).strip()
-                
-    if len(clean) > 95:
-        segment = clean[:95]
-        last_punct = max(segment.rfind('.'), segment.rfind('!'), segment.rfind('?'), segment.rfind(','))
-        if last_punct > 35:
-            clean = segment[:last_punct + 1]
+    sentences = re.split(r'(?<=[.!?])\s+', clean)
+    chunks = []
+    current_chunk = ""
+    for s in sentences:
+        s = s.strip()
+        if not s:
+            continue
+        if len(current_chunk) + len(s) + 1 <= max_chunk_chars:
+            current_chunk = f"{current_chunk} {s}".strip()
         else:
-            clean = segment.rsplit(' ', 1)[0] + '.'
-            
-    return clean[:95].strip()
+            if current_chunk:
+                chunks.append(current_chunk)
+            current_chunk = s
+    if current_chunk:
+        chunks.append(current_chunk)
+    return chunks or [clean[:max_chunk_chars]]
 
 def call_sarvam_tts(text: str, language_code: str = "en-IN", speaker: Optional[str] = None) -> Optional[str]:
-    """Generates studio commentary audio via Sarvam AI TTS (cached in memory)."""
+    """Generates studio commentary audio via Sarvam AI TTS for the full message."""
     if not SARVAM_API_KEY:
         return None
-    clean_text = clean_for_speech(text)
-    if not clean_text:
+    chunks = chunk_text_for_tts(text)
+    if not chunks:
         return None
     chosen_speaker = speaker or SARVAM_SPEAKER or "ashwin_en_sports"
     valid_lang = language_code if language_code in ["en-IN", "hi-IN", "te-IN", "ta-IN", "mr-IN", "kn-IN", "bn-IN", "gu-IN"] else "en-IN"
-    cache_key = f"{clean_text}||{valid_lang}||{chosen_speaker}"
+    
+    clean_full_text = " ".join(chunks)
+    cache_key = f"{clean_full_text}||{valid_lang}||{chosen_speaker}"
     if cache_key in _tts_cache:
         return _tts_cache[cache_key]
 
@@ -224,12 +235,12 @@ def call_sarvam_tts(text: str, language_code: str = "en-IN", speaker: Optional[s
             "Content-Type": "application/json"
         }
         payload = {
-            "inputs": [clean_text],
+            "inputs": chunks,
             "target_language_code": valid_lang,
             "speaker": chosen_speaker,
             "model": SARVAM_TTS_MODEL
         }
-        res = requests.post(url, headers=headers, json=payload, timeout=20)
+        res = requests.post(url, headers=headers, json=payload, timeout=30)
         if res.status_code == 200:
             audios = res.json().get("audios", [])
             if audios and len(audios[0]) > 0:
@@ -242,7 +253,7 @@ def call_sarvam_tts(text: str, language_code: str = "en-IN", speaker: Optional[s
             print(f"[Sarvam TTS Error {res.status_code}] {res.text[:140]}")
             if chosen_speaker != "shubh":
                 payload["speaker"] = "shubh"
-                fallback_res = requests.post(url, headers=headers, json=payload, timeout=15)
+                fallback_res = requests.post(url, headers=headers, json=payload, timeout=20)
                 if fallback_res.status_code == 200:
                     audios = fallback_res.json().get("audios", [])
                     if audios and len(audios[0]) > 0:
