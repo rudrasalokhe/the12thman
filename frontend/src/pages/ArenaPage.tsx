@@ -54,6 +54,48 @@ function PlayerSelect({label,value,players,open,onToggle,onSelect}:SelectBoxProp
   );
 }
 
+function renderEvidenceItem(pt: any, idx: number) {
+  if (pt === null || pt === undefined) return null;
+  if (typeof pt === 'string') return <li key={idx}>{pt}</li>;
+  if (typeof pt === 'number' || typeof pt === 'boolean') return <li key={idx}>{String(pt)}</li>;
+
+  if (typeof pt === 'object') {
+    if (pt.type === 'h2h_card') {
+      return (
+        <li key={idx}>
+          <strong>Head-to-Head:</strong> {pt.runs ?? 0} runs scored off {pt.balls ?? 0} balls (SR {pt.strike_rate ?? 0}), {pt.dismissals ?? 0} dismissal{pt.dismissals === 1 ? '' : 's'}.
+        </li>
+      );
+    }
+    if (pt.type === 'recent_form_table') {
+      const innList = Array.isArray(pt.data)
+        ? pt.data.map((inn: any) => {
+            if (typeof inn === 'object' && inn !== null) {
+              const r = inn.runs ?? 0;
+              const no = inn.not_out ? '*' : '';
+              const b = inn.balls ? ` (${inn.balls}b)` : '';
+              const vs = inn.opposition ? ` vs ${inn.opposition}` : '';
+              return `${r}${no}${b}${vs}`;
+            }
+            return String(inn);
+          }).join(', ')
+        : '';
+      return (
+        <li key={idx}>
+          <strong>{pt.title || 'Recent Innings'}:</strong> {innList || 'No recent innings logged'}
+        </li>
+      );
+    }
+    const summary = Object.entries(pt)
+      .filter(([k]) => k !== 'type')
+      .map(([k, v]) => `${k.replace(/_/g, ' ')}: ${typeof v === 'object' ? JSON.stringify(v) : v}`)
+      .join(' · ');
+    return <li key={idx}>{summary || JSON.stringify(pt)}</li>;
+  }
+
+  return <li key={idx}>{String(pt)}</li>;
+}
+
 export function ArenaPage(){
   const [marquees,setMarquees]=useState<MarqueeMatchup[]>([]);
   const [players,setPlayers]=useState<Player[]>(INITIAL_PLAYERS);
@@ -704,9 +746,7 @@ export function ArenaPage(){
                 <details className="msg-evidence-details">
                   <summary><FileText size={11} /> Grounded Evidence ({m.evidence.length} points)</summary>
                   <ul>
-                    {m.evidence.map((pt, idx) => (
-                      <li key={idx}>{pt}</li>
-                    ))}
+                    {m.evidence.map((pt, idx) => renderEvidenceItem(pt, idx))}
                   </ul>
                 </details>
               )}
